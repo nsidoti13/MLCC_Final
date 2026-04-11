@@ -1,0 +1,254 @@
+# Wildfire Ignition Prediction — Master Configuration
+# All pipeline stages read from this file.
+
+# ---------------------------------------------------------------------------
+# Spatial grid
+# ---------------------------------------------------------------------------
+grid:
+  resolution: 6          # H3 resolution 6 ≈ 4 km edge length
+  # Bounding box for California (lon_min, lat_min, lon_max, lat_max)
+  bbox:
+    lon_min: -124.48
+    lat_min: 32.53
+    lon_max: -114.13
+    lat_max: 42.01
+  # Land-cover codes to exclude (water=11, developed-high=24 in NLCD)
+  exclude_lc_codes: [11, 12, 21, 22, 23, 24]
+
+# ---------------------------------------------------------------------------
+# Temporal settings
+# ---------------------------------------------------------------------------
+temporal:
+  start_date: "2015-01-01"
+  end_date:   "2023-12-31"
+  prediction_window_days: 7   # label=1 if ignition within next 7 days
+  lag_days_short: 7           # rolling weather look-back (short)
+  lag_days_long:  30          # rolling weather look-back (long)
+
+# ---------------------------------------------------------------------------
+# Train / Val / Test splits  (year-based, no random splits)
+# ---------------------------------------------------------------------------
+splits:
+  train:
+    start: "2015-01-01"
+    end:   "2021-12-31"
+  val:
+    start: "2022-01-01"
+    end:   "2022-12-31"
+  test:
+    start: "2023-01-01"
+    end:   "2023-12-31"
+
+# ---------------------------------------------------------------------------
+# Data sources
+# ---------------------------------------------------------------------------
+data:
+  raw_dir:       "data/raw"
+  interim_dir:   "data/interim"
+  processed_dir: "data/processed"
+
+  modis:
+    product:     "MOD14A1"      # MODIS/Terra Thermal Anomalies Daily L3
+    collection:  "061"
+    base_url:    "https://e4ftl01.cr.usgs.gov/MOLT/MOD14A1.061/"
+    filename_pattern: "MOD14A1.A{year}{doy}.h{h:02d}v{v:02d}.061.*.hdf"
+
+  noaa_cfs:
+    # NOAA Climate Forecast System v2 — 7-day forecast fields
+    base_url:    "https://nomads.ncep.noaa.gov/pub/data/nccf/com/cfs/prod/"
+    variables:   ["tmp2m", "rh2m", "wnd10m", "apcp"]
+    forecast_hours: [24, 48, 72, 96, 120, 144, 168]
+
+  landfire:
+    base_url:    "https://lfps.usgs.gov/arcgis/rest/services/LandfireProductService/GPServer/LandfireProductService/"
+    layers:
+      - "US_220_EVT"    # Existing Vegetation Type
+      - "US_220_FBFM40" # Fire Behavior Fuel Model 40
+      - "US_220_CBD"    # Canopy Bulk Density
+      - "US_220_CBH"    # Canopy Base Height
+      - "US_220_CC"     # Canopy Cover
+      - "US_220_CH"     # Canopy Height
+
+  gridmet:
+    # University of Idaho gridMET — daily 4 km surface meteorology (CONUS)
+    # https://www.climatologylab.org/gridmet.html
+    # THREDDS file server, no authentication required.
+    base_url: "https://www.northwestknowledge.net/metdata/data/"
+    variables:
+      tmmx:  "Maximum Near-Surface Air Temperature (K)"
+      tmmn:  "Minimum Near-Surface Air Temperature (K)"
+      pr:    "Precipitation Amount (mm)"
+      vs:    "Wind Speed at 10m (m/s)"
+      rmax:  "Maximum Near-Surface Relative Humidity (%)"
+      rmin:  "Minimum Near-Surface Relative Humidity (%)"
+      srad:  "Surface Downwelling Shortwave Radiation (W/m²)"
+      vpd:   "Mean Vapor Pressure Deficit (kPa)"
+
+  ndfd:
+    # NOAA National Digital Forecast Database — operational 7-day gridded forecasts
+    # https://digital.weather.gov/
+    # Operational files hosted on NOAA's public FTP/HTTPS server.
+    # NOTE: tgftp.nws.noaa.gov holds only current operational forecasts (~7 days).
+    #       For historical NDFD (training period), use gridMET + ERA5 instead.
+    base_url: "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/"
+    elements:
+      # key = element code used in NDFD filename; value = description
+      maxt:  "Maximum Temperature (K)"
+      mint:  "Minimum Temperature (K)"
+      wind:  "Sustained Wind Speed (knots)"
+      rhm:   "Relative Humidity (%)"
+      qpf:   "Quantitative Precipitation Forecast (inches)"
+      sky:   "Cloud Cover (%)"
+    periods:
+      - "VP.001-003"   # day 1–3
+      - "VP.004-007"   # day 4–7
+
+  era5:
+    # ECMWF ERA5 hourly reanalysis on single levels via Copernicus CDS API.
+    # Register at https://cds.climate.copernicus.eu (free account)
+    # Then go to your profile page and copy your API key.
+    # Place credentials in ~/.cdsapirc:
+    #   url: https://cds.climate.copernicus.eu/api
+    #   key: <your-api-key>
+    dataset: "reanalysis-era5-single-levels"
+    product_type: "reanalysis"
+    format: "netcdf"
+    # CDS variable names for single-level ERA5
+    variables:
+      - "2m_temperature"
+      - "2m_dewpoint_temperature"
+      - "10m_u_component_of_wind"
+      - "10m_v_component_of_wind"
+      - "total_precipitation"
+      - "surface_solar_radiation_downwards"
+    # Download at daily resolution (aggregate from hourly in preprocessing)
+    times: ["00:00", "06:00", "12:00", "18:00"]
+
+  terrain:
+    # USGS 1/3 arc-second DEM via The National Map
+    base_url: "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/"
+
+  drought:
+    # California statewide Palmer Drought Severity Index (PDSI), monthly
+    # Source: NOAA NCEI — negative = drought, positive = wet conditions
+    path: "data/raw/drought/CAPDSI.csv"
+
+  weather_stations:
+    # NOAA GHCN-D daily observations, 88 California stations 2015-2024
+    # Variables: AWND (m/s), PRCP (mm), TMAX (°C), TMIN (°C)
+    path: "data/raw/weather_stations/CAWeather.csv"
+    interpolation_method: "nearest"   # "nearest" or "idw"
+
+  human:
+    roads_url:      "https://www2.census.gov/geo/tiger/TIGER2023/ROADS/"
+    powerlines_url: "https://hifld-geoplatform.opendata.arcgis.com/datasets/electric-power-transmission-lines"
+    pop_density_url: "https://data.census.gov/api/access/data/group/B01003"
+
+# ---------------------------------------------------------------------------
+# Feature engineering
+# ---------------------------------------------------------------------------
+features:
+  forecast:
+    - "tmp2m_max_7d"
+    - "rh2m_min_7d"
+    - "wnd10m_max_7d"
+    - "apcp_sum_7d"
+  lagged_weather:
+    - "tmp2m_roll7_mean"
+    - "tmp2m_roll30_mean"
+    - "rh2m_roll7_mean"
+    - "rh2m_roll30_mean"
+    - "apcp_roll30_sum"
+    - "wnd10m_roll7_mean"
+  drought:
+    - "pdsi"                    # Palmer Drought Severity Index (monthly, statewide)
+
+  station_weather:
+    - "awnd"                    # Average wind speed (m/s) — nearest station
+    - "prcp"                    # Precipitation (mm)
+    - "tmax"                    # Max temperature (°C)
+    - "tmin"                    # Min temperature (°C)
+
+  static:
+    - "elevation_m"
+    - "slope_deg"
+    - "aspect_deg"
+    - "fuel_model"
+    - "canopy_cover_pct"
+    - "canopy_bulk_density"
+    - "canopy_base_height"
+    - "vegetation_type"
+  human:
+    - "road_density_km_per_km2"
+    - "dist_to_powerline_km"
+    - "pop_density_per_km2"
+  spatial:
+    - "neighbor_fire_count_7d"
+    - "neighbor_dryness_index"
+    - "wind_alignment_score"
+  temporal:
+    - "doy_sin"
+    - "doy_cos"
+    - "month_sin"
+    - "month_cos"
+
+# ---------------------------------------------------------------------------
+# Model hyperparameters
+# ---------------------------------------------------------------------------
+models:
+  logistic_regression:
+    C: 0.1
+    max_iter: 1000
+    class_weight: "balanced"
+    solver: "saga"
+
+  lgbm:
+    n_estimators: 1000
+    learning_rate: 0.05
+    num_leaves: 63
+    max_depth: 7
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    # scale_pos_weight is set programmatically from label ratio
+    n_jobs: -1
+    verbose: -1
+
+  xgboost:
+    n_estimators: 1000
+    learning_rate: 0.05
+    max_depth: 7
+    min_child_weight: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    # scale_pos_weight is set programmatically from label ratio
+    tree_method: "hist"
+    n_jobs: -1
+    verbosity: 0
+
+  training:
+    early_stopping_rounds: 50
+    cv_n_splits: 3            # TimeSeriesSplit folds
+    eval_metric_lgbm: "aucpr"
+    eval_metric_xgb:  "aucpr"
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+evaluation:
+  top_k: 500                  # recall in top-k highest-risk cells
+  pr_curve_output: "outputs/reports/pr_curve.png"
+  roc_curve_output: "outputs/reports/roc_curve.png"
+  metrics_output:  "outputs/reports/metrics.json"
+
+# ---------------------------------------------------------------------------
+# Inference
+# ---------------------------------------------------------------------------
+inference:
+  predictions_dir: "outputs/predictions"
+  maps_dir:        "outputs/maps"
+  model_path:      "outputs/models/lgbm_model.pkl"

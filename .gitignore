@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Data (large files)
+data/raw/
+data/processed/
+
+# Outputs (models, maps, reports)
+outputs/models/*.pkl
+outputs/maps/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Secrets / API keys
+.cdsapirc
+*.env
