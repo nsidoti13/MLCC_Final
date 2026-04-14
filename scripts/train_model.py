@@ -63,6 +63,7 @@ RANDOM_SEED = 42
 MODIS_CSV   = PROJECT_ROOT / "data/raw/modis/MODISFireData.csv"
 WEATHER_CSV = PROJECT_ROOT / "data/raw/weather_stations/CAWeather.csv"
 PDSI_CSV    = PROJECT_ROOT / "data/raw/drought/CAPDSI.csv"
+LANDFIRE_DIR = PROJECT_ROOT / "data/raw/landfire"
 OUT_DIR     = PROJECT_ROOT / "outputs"
 (OUT_DIR / "models").mkdir(parents=True, exist_ok=True)
 (OUT_DIR / "reports").mkdir(parents=True, exist_ok=True)
@@ -413,7 +414,35 @@ def build_spatial_features(sample_df, grid_df):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 5d — Weather-derived features
+# STEP 5d — Vegetation / fuel features (LANDFIRE)
+# ══════════════════════════════════════════════════════════════════════════════
+def build_vegetation_features(sample_df, grid_df):
+    """
+    Add static LANDFIRE vegetation and fuel features per cell.
+
+    Features added
+    --------------
+    evt           : Existing Vegetation Type code (categorical)
+    fbfm40        : Fire Behavior Fuel Model 40 code (categorical)
+    canopy_cover  : Canopy cover percentage (0–100)
+    """
+    from src.data.landfire import build_vegetation_features as _build_veg
+
+    log.info("Building vegetation features (LANDFIRE)…")
+    veg_df = _build_veg(grid_df, tif_dir=None)   # downloads if needed
+    result = sample_df.merge(veg_df, on="cell_id", how="left")
+    result["evt"]          = result["evt"].fillna(0).astype(int)
+    result["fbfm40"]       = result["fbfm40"].fillna(0).astype(int)
+    result["canopy_cover"] = result["canopy_cover"].fillna(0.0)
+    log.info(
+        "Vegetation features added. evt unique=%d, fbfm40 unique=%d, canopy_cover mean=%.1f",
+        result["evt"].nunique(), result["fbfm40"].nunique(), result["canopy_cover"].mean(),
+    )
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 5e — Weather-derived features
 # ══════════════════════════════════════════════════════════════════════════════
 def build_derived_weather_features(df):
     """
@@ -598,6 +627,7 @@ if __name__ == "__main__":
     sample   = build_fire_history_features(sample, fire_df)
     sample   = build_spatial_features(sample, grid_df)
     sample   = build_derived_weather_features(sample)
+    sample   = build_vegetation_features(sample, grid_df)
 
     n_features_after = len([c for c in sample.columns if c not in ("cell_id", "date", "label")])
     log.info("Feature count AFTER new features: %d (+%d)", n_features_after, n_features_after - n_features_before)

@@ -207,6 +207,14 @@ def build_features_for_date(target_date: pd.Timestamp, grid_df) -> pd.DataFrame:
                                   (df[wind_col] > df[wind_col].quantile(0.60)).astype(int))
     df["consecutive_dry_days"] = (df[prcp_col] < 5.0).astype(int) * 30
 
+    # ── Vegetation features (LANDFIRE) ────────────────────────────────────
+    from src.data.landfire import build_vegetation_features as _build_veg
+    veg_df = _build_veg(grid_df, tif_dir=None)
+    df = df.merge(veg_df, on="cell_id", how="left")
+    df["evt"]          = df["evt"].fillna(0).astype(int)
+    df["fbfm40"]       = df["fbfm40"].fillna(0).astype(int)
+    df["canopy_cover"] = df["canopy_cover"].fillna(0.0)
+
     log.info("Features built: %d cells × %d columns", len(df), len(df.columns))
     return df
 
@@ -228,6 +236,7 @@ def run_inference(feature_df) -> pd.DataFrame:
         'days_since_last_fire', 'cell_fire_count_1yr', 'neighbor_fire_7d',
         'neighbor_fire_30d', 'cell_lat', 'cell_lon', 'dist_to_coast_km', 'is_inland',
         'temp_range', 'vpd_proxy', 'hot_dry_windy', 'consecutive_dry_days',
+        'evt', 'fbfm40', 'canopy_cover',
     ]
     X = feature_df[FEATURE_COLS].fillna(0)
     proba = model.predict_proba(X)[:, 1]
