@@ -12,14 +12,15 @@ Predict the **probability of wildfire ignition** across California over the next
 
 Trained on 2015–2021, validated on 2022, tested on 2023. ~3.6M samples (4.8% positive rate).
 
-| Model | Split | PR-AUC | ROC-AUC | Recall@500 | Precision@500 |
-|-------|-------|--------|---------|------------|---------------|
-| Logistic Regression | Test 2023 | 0.481 | 0.923 | 0.029 | 0.958 |
-| LightGBM | Test 2023 | 0.467 | 0.916 | 0.021 | 0.698 |
+| Model | PR-AUC | ROC-AUC | Recall@500 | Precision@500 |
+|-------|--------|---------|------------|---------------|
+| Logistic Regression | 0.484 | 0.924 | 0.029 | 0.958 |
+| LightGBM | **0.531** | **0.937** | 0.024 | 0.788 |
+| ConvLSTM | 0.360 | 0.915 | — | — |
 
 **Baseline** (random classifier): PR-AUC ≈ positive_rate ≈ 0.048
 
-Both models substantially exceed the random baseline. Logistic Regression edges out LightGBM on PR-AUC and Precision@500 on this dataset, likely due to the strong linearity of geographic and temporal signals (longitude, day-of-year, fire history).
+LightGBM is the strongest model, benefiting most from the LANDFIRE vegetation features (`evt`, `fbfm40`). The ConvLSTM trails on PR-AUC due to resolution loss when rasterizing 25k cells to a 32×32 grid.
 
 ---
 
@@ -94,6 +95,7 @@ pip install -r requirements.txt
 | **NASA FIRMS** | `data/raw/modis/MODISFireData.csv` | Lat/lon fire detections, confidence, type |
 | **NOAA GHCN** | `data/raw/weather/CAWeather.csv` | Tmax, tmin, prcp, wind speed (88 CA stations, 2015–2024) |
 | **NOAA NCEI** | `data/raw/drought/CAPDSI.csv` | Palmer Drought Severity Index (monthly, 2015–2024) |
+| **LANDFIRE LF2022** | `data/raw/landfire/landfire_features.parquet` | EVT, FBFM40, Canopy Cover (queried via ArcGIS ImageServer API) |
 
 Place all three files in the paths above before running the pipeline.
 
@@ -143,6 +145,7 @@ Output: `outputs/maps/wildfire_risk_20230820.html`
 | **Fire history** | days_since_last_fire, cell_fire_count_1yr, neighbor_fire_7d, neighbor_fire_30d |
 | **Spatial** | cell_lat, cell_lon, dist_to_coast_km, is_inland |
 | **Derived weather** | temp_range, vpd_proxy, hot_dry_windy, consecutive_dry_days |
+| **Vegetation (LANDFIRE)** | evt (Existing Vegetation Type), fbfm40 (Fire Behavior Fuel Model 40), canopy_cover |
 
 All features are computed strictly from data prior to the forecast date — no future leakage.
 
@@ -187,11 +190,13 @@ MLCC_Final/
 ├── scripts/
 │   ├── train_model.py           # LightGBM + Logistic Regression pipeline
 │   ├── train_convlstm.py        # ConvLSTM spatiotemporal pipeline
+│   ├── eval_convlstm.py         # Standalone ConvLSTM evaluation on test set
 │   └── visualize_predictions.py # Folium interactive risk map
 ├── src/
 │   ├── data/
 │   │   ├── download.py          # gridMET, NDFD, ERA5 download utilities
-│   │   └── ingest.py            # load_caweather(), load_capdsi(), weather interpolation
+│   │   ├── ingest.py            # load_caweather(), load_capdsi(), weather interpolation
+│   │   └── landfire.py          # LANDFIRE EVT/FBFM40/CC via ArcGIS ImageServer API
 │   ├── labeling/
 │   │   └── labels.py            # MODIS CSV ingestion, H3 deduplication, cell-day labels
 │   ├── models/
