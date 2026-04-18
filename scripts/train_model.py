@@ -592,12 +592,25 @@ def evaluate(lgb_proba, lr_proba, y_test, model, feature_cols):
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 8 — Save model
 # ══════════════════════════════════════════════════════════════════════════════
-def save_model(model):
+def save_model(model, lr_model, lgb_proba, lr_proba, y_test):
     import pickle
     model_path = OUT_DIR / "models" / "lgbm_model.pkl"
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
     log.info("Model saved → %s", model_path)
+
+    lr_path = OUT_DIR / "models" / "lr_model.pkl"
+    with open(lr_path, "wb") as f:
+        pickle.dump(lr_model, f)
+    log.info("LR model saved → %s", lr_path)
+
+    preds_path = OUT_DIR / "reports" / "test_predictions.parquet"
+    pd.DataFrame({
+        "y_test": y_test.values,
+        "lgb_proba": lgb_proba,
+        "lr_proba": lr_proba,
+    }).to_parquet(preds_path, index=False)
+    log.info("Test predictions saved → %s", preds_path)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -634,6 +647,6 @@ if __name__ == "__main__":
 
     model, lr, lgb_proba, lr_proba, y_test, feat_cols = train(sample)
     metrics = evaluate(lgb_proba, lr_proba, y_test, model, feat_cols)
-    save_model(model)
+    save_model(model, lr, lgb_proba, lr_proba, y_test)
 
     log.info("━━━ Done ━━━")

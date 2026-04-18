@@ -4,7 +4,10 @@
       "Bash(.venv/bin/pip install:*)",
       "Bash(.venv/bin/python -m pytest tests/ -q)",
       "Bash(.venv/bin/python -c \"import torch; print\\(''torch'', torch.__version__\\)\")",
-      "Bash(.venv/bin/python scripts/train_convlstm.py)"
+      "Bash(.venv/bin/python scripts/train_convlstm.py)",
+      "WebSearch",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python -c \":*)"
     ]
   }
 }
